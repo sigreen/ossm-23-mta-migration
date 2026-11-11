@@ -299,12 +299,20 @@ oc delete smmr default -n istio-system
 oc delete servicemeshmember default -n custom-app
 ```
 
-### 4g — Deploy Kiali (no longer bundled in control plane)
+### 4g — Deploy the observability stack (Prometheus + Kiali)
 
-> "In OSSM 2.x, Kiali was bundled inside the SMCP. In OSSM 3, it's a separate CR —
-> upgradeable independently, configurable per team."
+> "In OSSM 2.x, Kiali and Prometheus were bundled inside the SMCP. In OSSM 3, they're
+> separate — Kiali via its own operator CR, Prometheus as a standalone deployment.
+> This decoupling means each can be upgraded and configured independently."
 
 ```bash
+# Deploy Prometheus (required by Kiali for the traffic graph)
+oc apply -f setup/ossm3/04-prometheus.yaml
+
+until oc get pods -n istio-system -l app=prometheus --no-headers | grep -q '1/1'; do sleep 5; done
+echo "Prometheus ready"
+
+# Deploy Kiali, wired to our new Prometheus
 cat <<'EOF' | oc apply -f -
 apiVersion: kiali.io/v1alpha1
 kind: Kiali
@@ -319,6 +327,8 @@ spec:
     accessible_namespaces:
       - "**"
   external_services:
+    prometheus:
+      url: "http://prometheus.istio-system:9090"
     istio:
       root_namespace: istio-system
     grafana:
@@ -329,6 +339,16 @@ EOF
 
 until oc get pods -n istio-system -l app=kiali --no-headers | grep -q '1/1'; do sleep 5; done
 echo "Kiali ready: https://$(oc get route kiali -n istio-system -o jsonpath='{.spec.host}')/console/overview"
+```
+
+> "To see the traffic graph in Kiali, generate some load first — Prometheus needs at least
+> one scrape interval of Istio metrics before the graph populates."
+
+```bash
+for i in $(seq 1 20); do
+  curl -so /dev/null \
+    http://istio-ingressgateway-istio-system.apps.cluster-pt77w.dyn.redhatworkshops.io/productpage
+done
 ```
 
 ### 4h — Deploy the ingress gateway
