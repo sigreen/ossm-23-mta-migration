@@ -451,17 +451,51 @@ done
 
 ---
 
-## Scene 6 — MTA Progress Tracking [~2 min, if time permits]
+## Scene 6 — What's Next: Progress Tracking + Konveyor AI [~4 min, if time permits]
 
 **Switch back to MTA Console**
 
-> "The last thing worth showing: as your team completes each migration step, you mark findings
-> in MTA as resolved. This gives you a living audit trail — mandatory blockers getting ticked
-> off, effort burndown over time, full history of who changed what and when."
+### 6a — MTA Progress Tracking
+
+> "As your team completes each migration step, you mark findings in MTA as resolved. This gives
+> you a living audit trail — mandatory blockers getting ticked off, effort burndown over time,
+> full history of who changed what and when."
 
 1. Go to **Applications** → **ossm-mesh-config** → **Reports**
 2. Click into a mandatory finding
 3. Show the **Mark as resolved** / status workflow
+
+### 6b — What's Next: Konveyor AI (Kai) [slide 13]
+
+**Switch to slide 13 — Konveyor AI**
+
+> "One important thing to call out before we wrap up: MTA and its AI companion — Konveyor AI,
+> or Kai — were designed **primarily for application code migration**. Java EE to Quarkus, Spring
+> Boot upgrades, .NET Framework to .NET Core. What we did today — analyzing Kubernetes YAML and
+> infrastructure manifests — uses MTA's extensible custom rules engine to apply the same discipline
+> to a platform migration. That's a newer use case, and it works well for analysis. The
+> AI-assisted transformation side is still evolving for YAML."
+
+> "So what does Kai look like in action? Today, MTA told us *what* needs to change and gave us
+> remediation guidance. With Kai enabled, the report would also show a **'Get fixes'** button
+> next to each finding. Kai takes the finding plus the affected file, sends it to an LLM, and
+> generates a proposed YAML transformation — right in the console."
+
+**Point out the progression on slide 13:**
+
+> "For the simpler mandatory findings — removing the ServiceMeshMember, replacing the SMMR with
+> namespace labels, creating the mesh-wide PeerAuthentication — Kai produces ready-to-apply YAML.
+> For the complex ones like the full SMCP-to-Istio-CR mapping, it generates a solid starting point
+> that an engineer reviews and approves. The engineer moves from YAML author to YAML reviewer."
+
+> "Kai isn't enabled in this environment today — it requires connecting an LLM backend — but
+> this is the natural next step. MTA finds the issues. Kai generates the fixes. A GitOps pipeline
+> like ArgoCD applies them. The human stays in the loop as the approver, not the typist."
+
+**If asked how to enable Kai:**
+> "It's a tech preview in MTA 8.x. You enable it via the Tackle CR with an LLM provider — IBM
+> WatsonX with Granite models is the Red Hat-supported path, but OpenAI and self-hosted models
+> work too. Happy to follow up with the configuration steps after the session."
 
 ---
 
@@ -475,7 +509,7 @@ done
 | Scene 3 | Walking the report | 8 min |
 | Scene 4 | Applying migration | 10 min |
 | Scene 5 | Validation | 5 min |
-| Scene 6 | Bonus: MTA tracking | 2 min |
+| Scene 6 | MTA tracking + Konveyor AI "what's next" | 4 min |
 | Q&A | | 10 min |
 | **Total** | | **~58 min** |
 

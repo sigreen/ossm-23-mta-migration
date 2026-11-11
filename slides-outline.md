@@ -19,7 +19,8 @@
 4. MTA 8.3.3 overview and OSSM migration rules
 5. Live demo walkthrough
 6. Results and validation
-7. Next steps & resources
+7. What's next: Konveyor AI (Kai) for automated transformation
+8. Next steps & resources
 
 ---
 
@@ -90,16 +91,18 @@
 - Red Hat's application and platform modernization analysis tool (formerly Windup)
 - v8.3.3 — available as an operator on OCP, includes web console + CLI (`mta-cli`)
 
-**How MTA helps with OSSM migration:**
-- Ships built-in **OSSM 2→3 ruleset** (`ossm-migration` technology tag)
-- Scans: Kubernetes/OpenShift YAML manifests, Helm charts, Kustomize overlays, operator configs
-- Produces: categorized findings (mandatory / optional / information), effort estimates, remediation guidance
-- Generates: transformed output YAML where automated fixes are possible
+**Important context — MTA's primary design target:**
+> MTA and its AI companion Konveyor AI (Kai) were built primarily for **application code migration** — Java EE → Quarkus, Spring Boot upgrades, .NET Framework → .NET Core, cloud-readiness analysis. The OSSM 2→3 migration in this demo uses MTA's **extensible custom rules engine** (Kantra) to apply the same analysis discipline to infrastructure YAML. This is a newer use case — the analysis works well, the AI-assisted transformation (Kai) is evolving.
+
+**How MTA helps with OSSM migration (via custom Kantra rules):**
+- **Custom ruleset** — 10 Kantra rules covering all Maistra-specific APIs (shipped in this repo, not built-in to MTA)
+- Scans: Kubernetes/OpenShift YAML manifests in a Git repository
+- Produces: categorized findings (mandatory / optional / potential), effort estimates, remediation guidance
 - Tracks: migration progress per application / per cluster scope
 
 **MTA analysis modes for this use case:**
-- **Source analysis** — scan Git repos or uploaded archives containing mesh config
-- **Binary/manifest analysis** — point at a live namespace export or archive of `oc get -o yaml` output
+- **Source analysis** — scan a Git repo containing YAML exports of the mesh configuration
+- Rules use `builtin.filecontent` pattern matching — no build tool or language runtime required
 
 ---
 
@@ -309,7 +312,46 @@ curl -s http://${GATEWAY_URL}/productpage | grep "<title>"
 
 ---
 
-## Slide 13 — Summary
+## Slide 13 — What's Next: Konveyor AI (Kai) for Automated Transformation
+
+**MTA found the issues. What if it could fix them too?**
+
+**Konveyor AI (Kai) — AI-assisted migration:**
+- Kai is MTA's AI companion: takes analysis findings and uses an LLM to **generate transformed code/YAML automatically**
+- Built primarily for **application code** (Java Spring → Quarkus, EAP → Quarkus, etc.) — YAML infrastructure transformation is an emerging capability
+- When enabled, the MTA report shows a **"Get fixes"** button alongside each finding
+- Kai sends the finding + affected file to the LLM: *"here is the OSSM 2.x resource and what needs to change — generate the OSSM 3.x equivalent"*
+
+**How Kai would handle our 10 OSSM findings:**
+
+| Finding | Kai output quality | Notes |
+|---|---|---|
+| Remove `ServiceMeshMember` | Excellent | Simple deletion, no ambiguity |
+| SMMR → namespace labels | Good | Well-defined 1:1 transformation |
+| SMCP mTLS → `PeerAuthentication` | Good | Clear target format |
+| Kiali CR creation | Good | Standard template |
+| Ingress gateway Deployment | Good | Standard injection-based template |
+| SMCP → `Istio` CR (full) | Moderate | Complex field mapping — needs review |
+| Externalize Jaeger → `Telemetry` CR | Moderate | Requires OTLP knowledge |
+| Classic Gateway → Gateway API | Moderate | HTTPRoute syntax differs enough to need review |
+
+**Current status:**
+- Kai is **not enabled** in this demo environment (requires LLM API key — WatsonX, OpenAI, or self-hosted)
+- Available as a tech preview feature in MTA 8.x — enable via the Tackle CR
+- For infrastructure YAML: Kai generates starting-point YAML that an engineer reviews and approves — it does not automatically apply changes
+
+**The vision:**
+```
+MTA finds  →  Kai transforms  →  Engineer reviews  →  GitOps pipeline applies
+(analysis)     (AI-generated       (in MTA UI)         (ArgoCD / Tekton)
+                YAML diffs)
+```
+
+> _"Today MTA tells you what needs to change and gives you the guidance. Tomorrow Kai generates the fix. The engineer moves from YAML author to YAML reviewer."_
+
+---
+
+## Slide 15 — Summary
 
 **What we demonstrated:**
 - MTA 8.3.3 analyzed OSSM 2.x configuration and produced a prioritized migration report
@@ -323,7 +365,7 @@ curl -s http://${GATEWAY_URL}/productpage | grep "<title>"
 
 ---
 
-## Slide 14 — Next Steps & Resources
+## Slide 16 — Next Steps & Resources
 
 **Next steps for your environment:**
 1. Install MTA 8.3.3 from OperatorHub → `mta` namespace
