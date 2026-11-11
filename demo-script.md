@@ -475,15 +475,25 @@ done
 
 **Switch back to MTA Console**
 
-### 6a — MTA Progress Tracking
+### 6a — MTA Migration Wave Tracking
 
-> "As your team completes each migration step, you mark findings in MTA as resolved. This gives
-> you a living audit trail — mandatory blockers getting ticked off, effort burndown over time,
-> full history of who changed what and when."
+> "MTA tracks migration progress at the application level using **Migration Waves** — you group
+> applications together, set a target migration date, and MTA tracks the wave status as
+> applications move through analysis to migration complete."
 
-1. Go to **Applications** → **ossm-mesh-config** → **Reports**
-2. Click into a mandatory finding
-3. Show the **Mark as resolved** / status workflow
+1. In the left nav click **Migration** → **Migration waves**
+2. Click **Create new** → name it `OSSM 2 to 3 Wave 1`, set a target date
+3. Add the `ossm-mesh-config` application to the wave
+4. Show how the wave aggregates effort estimates across all applications in scope
+
+> "For teams migrating many namespaces — say, 20 applications each enrolled in the mesh —
+> Migration Waves let you plan in batches: non-prod first, then prod, with a target date per
+> wave. MTA rolls up the total story-point effort so you can forecast the work realistically."
+
+> "Note: individual findings within the analysis report are read-only — they're the output
+> of the analysis engine. The tracking story in MTA is at the application and wave level,
+> not per-finding. For per-finding issue tracking, MTA integrates with Jira and GitHub Issues
+> via the **Trackers** feature under Administration."
 
 ### 6b — What's Next: Konveyor AI (Kai) [slide 13]
 
