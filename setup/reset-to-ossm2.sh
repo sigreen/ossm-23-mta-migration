@@ -70,14 +70,17 @@ echo "=== Step 8: Restart pods to pick up OSSM 2.x proxy ==="
 oc rollout restart deployment -n bookinfo
 oc rollout restart deployment -n custom-app
 
-echo "  Waiting for pods to come up with OSSM 2.x sidecars (2/2)..."
-until oc get pods -n bookinfo --no-headers 2>/dev/null | awk '{print $2}' | grep -qv '^[01]/'; do
-  sleep 8
+echo "  Waiting for rollout to complete (uses rollout status, not pod count)..."
+for deploy in details-v1 productpage-v1 ratings-v1 reviews-v1 reviews-v2 reviews-v3; do
+  oc rollout status deployment/$deploy -n bookinfo --timeout=120s
 done
-until oc get pods -n bookinfo --no-headers 2>/dev/null | awk '{print $2}' | grep -q '2/2'; do
-  sleep 8
-done
+oc rollout status deployment/httpbin -n custom-app --timeout=60s
 echo "  Pods ready"
+
+echo ""
+echo "=== Waiting for Kiali to be restored by SMCP ==="
+until oc get route kiali -n istio-system &>/dev/null; do sleep 5; done
+echo "  Kiali route ready"
 
 echo ""
 echo "=== Reset complete ==="
@@ -90,9 +93,10 @@ echo ""
 oc get pods -n bookinfo --no-headers | awk '{print $1, $2}'
 echo ""
 PROXY_IMAGE=$(oc get pod -n bookinfo -l app=productpage \
-  -o jsonpath='{.items[0].spec.containers[?(@.name=="istio-proxy")].image}' 2>/dev/null)
+  -o jsonpath='{range .items[-1:]}{.spec.containers[?(@.name=="istio-proxy")].image}{end}' 2>/dev/null)
 echo "Proxy image: $PROXY_IMAGE"
-echo "(should contain 'maistra' or 'openshift-service-mesh' — not 'proxyv2')"
+echo "(OSSM 2.x = 'proxyv2-rhel9' without 'istio-' prefix)"
+echo "(OSSM 3.x = 'istio-proxyv2-rhel9' with 'istio-' prefix)"
 echo ""
 echo "Bookinfo URL:"
 echo "  http://$(oc get route istio-ingressgateway -n istio-system -o jsonpath='{.spec.host}')/productpage"
