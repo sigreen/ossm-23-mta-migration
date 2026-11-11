@@ -1,0 +1,10 @@
+---
+# Mesh-wide STRICT mTLS — replaces SMCP spec.security.dataPlane.mtls: true
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT

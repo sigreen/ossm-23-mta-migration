@@ -1,0 +1,412 @@
+- ruleID: ossm-smcp-mandatory-001
+  description: "ServiceMeshControlPlane must be replaced by Istio CR"
+  category: mandatory
+  effort: 5
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "OSSM 3 Migration Guide"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v2x/ossm-upgrade.html"
+    - title: "Sail Operator Istio CR Reference"
+      url: "https://github.com/istio-ecosystem/sail-operator/tree/main/docs"
+  message: |
+    The `ServiceMeshControlPlane` (SMCP) resource is specific to OpenShift Service Mesh 2.x (Maistra API group `maistra.io/v2`)
+    and does not exist in OSSM 3.x.
+
+    **Required action:** Replace the SMCP with an `Istio` CR (API group `sailoperator.io/v1`) managed by the
+    Red Hat OpenShift Service Mesh 3 operator (based on Sail Operator).
+
+    **Key mapping:**
+    - `spec.version` → `spec.version` (use upstream Istio semver, e.g. `v1.24.3`)
+    - `spec.security.dataPlane.mtls: true` → mesh-wide `PeerAuthentication` in `istio-system`
+    - `spec.tracing.*` → externalize via `Telemetry` CR + OpenTelemetry Collector
+    - `spec.addons.kiali` → install Kiali Operator separately
+    - `spec.gateways.*` → separate `Gateway` resources or Kubernetes Gateway API
+
+    The CNI configuration must be extracted into a separate `IstioCNI` CR in the `istio-cni` namespace.
+  when:
+    or:
+      - builtin.filecontent:
+          filePattern: .*\.ya?ml
+          pattern: "kind: ServiceMeshControlPlane"
+      - builtin.filecontent:
+          filePattern: .*\.ya?ml
+          pattern: "maistra.io/v2"
+
+- ruleID: ossm-smmr-mandatory-002
+  description: "ServiceMeshMemberRoll must be replaced by namespace labels"
+  category: mandatory
+  effort: 3
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "OSSM 3 Namespace Configuration"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-create-smcp.html"
+  message: |
+    The `ServiceMeshMemberRoll` (SMMR) resource does not exist in OSSM 3.x.
+
+    **Required action:** Delete the SMMR and enroll namespaces using one of two methods:
+    1. **Namespace label (recommended):** Apply `istio-injection=enabled` label to each namespace
+       ```
+       oc label namespace <namespace> istio-injection=enabled
+       ```
+    2. **DiscoverySelectors:** Add `spec.values.pilot.env.PILOT_ENABLE_NAMESPACE_SCOPING` and
+       configure `spec.meshConfig.discoverySelectors` in the Istio CR.
+
+    This approach is more GitOps-friendly and aligns with upstream Istio community conventions.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: ServiceMeshMemberRoll"
+
+- ruleID: ossm-servicemeshmember-mandatory-003
+  description: "ServiceMeshMember must be removed"
+  category: mandatory
+  effort: 1
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "OSSM 3 Namespace Enrollment"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-create-smcp.html"
+  message: |
+    The `ServiceMeshMember` resource does not exist in OSSM 3.x.
+
+    **Required action:** Remove all `ServiceMeshMember` resources. Namespace membership is now
+    controlled entirely by the `istio-injection=enabled` namespace label (or DiscoverySelectors in
+    the Istio CR). The per-namespace opt-in model using `ServiceMeshMember` is eliminated.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: ServiceMeshMember"
+
+- ruleID: ossm-servicemeshextension-mandatory-004
+  description: "ServiceMeshExtension must be replaced by WasmPlugin"
+  category: mandatory
+  effort: 8
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "WasmPlugin API Reference"
+      url: "https://istio.io/latest/docs/reference/config/proxy_extensions/wasm-plugin/"
+    - title: "Migrate from ServiceMeshExtension to WasmPlugin"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v2x/ossm-extensions.html"
+  message: |
+    The `ServiceMeshExtension` resource (Maistra-specific WASM extension API) is not supported in OSSM 3.x.
+
+    **Required action:** Migrate to the upstream `WasmPlugin` API (`extensions.istio.io/v1alpha1`).
+
+    **Key mapping:**
+    - `spec.image` → `spec.url` (use OCI image URL)
+    - `spec.phase` → `spec.phase` (AUTHN, AUTHZ, STATS)
+    - `spec.priority` → `spec.priority`
+    - `spec.selector` → `spec.selector.matchLabels`
+    - `spec.config` → `spec.pluginConfig`
+
+    Verify the WASM binary is compatible with the target Istio proxy version.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: ServiceMeshExtension"
+
+- ruleID: ossm-smcp-mtls-mandatory-005
+  description: "SMCP mTLS config must be replaced by PeerAuthentication"
+  category: mandatory
+  effort: 2
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "PeerAuthentication API"
+      url: "https://istio.io/latest/docs/reference/config/security/peer_authentication/"
+  message: |
+    The SMCP field `spec.security.dataPlane.mtls: true` sets mesh-wide mTLS policy via the proprietary
+    Maistra API. This field has no equivalent in the OSSM 3.x `Istio` CR.
+
+    **Required action:** Create a mesh-wide `PeerAuthentication` resource in the `istio-system` namespace:
+    ```yaml
+    apiVersion: security.istio.io/v1beta1
+    kind: PeerAuthentication
+    metadata:
+      name: default
+      namespace: istio-system
+    spec:
+      mtls:
+        mode: STRICT
+    ```
+    This is the upstream Istio way to enforce mesh-wide mTLS and works identically in OSSM 3.x.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "mtls: true"
+
+- ruleID: ossm-smcp-jaeger-optional-006
+  description: "Externalize Jaeger tracing — SMCP addon not supported in OSSM 3"
+  category: optional
+  effort: 5
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "Distributed Tracing in OSSM 3"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-observability.html"
+    - title: "Telemetry API"
+      url: "https://istio.io/latest/docs/tasks/observability/distributed-tracing/telemetry-api/"
+  message: |
+    The SMCP field `spec.addons.jaeger` deploys Jaeger as a bundled sub-component. OSSM 3.x does
+    not bundle observability components — tracing must be configured externally.
+
+    **Recommended action:**
+    1. Deploy the Red Hat OpenShift distributed tracing operator (Jaeger) or Red Hat Tempo separately
+    2. Configure tracing via the Istio `Telemetry` CR:
+       ```yaml
+       apiVersion: telemetry.istio.io/v1
+       kind: Telemetry
+       metadata:
+         name: tracing-default
+         namespace: istio-system
+       spec:
+         tracing:
+           - providers:
+               - name: otel
+             randomSamplingPercentage: 1.0
+       ```
+    3. Add the OTLP provider to the Istio CR `spec.values.meshConfig.extensionProviders`
+
+    The bundled Jaeger in OSSM 2.x used in-memory or Elasticsearch storage. For production,
+    Red Hat Tempo with S3-compatible storage is recommended.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "type: Jaeger"
+
+- ruleID: ossm-gateway-api-optional-007
+  description: "Migrate classic Istio Gateway to Kubernetes Gateway API"
+  category: optional
+  effort: 3
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "Kubernetes Gateway API with OSSM 3"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-traffic-management.html"
+    - title: "Gateway API Migration"
+      url: "https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/"
+  message: |
+    Classic Istio `Gateway` and `VirtualService` resources for ingress are still supported in OSSM 3.x,
+    but the Kubernetes Gateway API (`gateway.networking.k8s.io`) is now the preferred approach and is
+    first-class in OSSM 3.
+
+    **Recommended (non-blocking):** Migrate ingress Gateways to the Kubernetes Gateway API:
+    ```yaml
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata:
+      name: bookinfo-gateway
+    spec:
+      gatewayClassName: istio
+      listeners:
+        - name: http
+          port: 80
+          protocol: HTTP
+          allowedRoutes:
+            namespaces:
+              from: Same
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: bookinfo
+    spec:
+      parentRefs:
+        - name: bookinfo-gateway
+      rules:
+        - matches:
+            - path:
+                value: /productpage
+          backendRefs:
+            - name: productpage
+              port: 9080
+    ```
+    Classic `Gateway`/`VirtualService` can remain during the transition — this is a future-proofing step.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: Gateway"
+
+- ruleID: ossm-peerauthentication-info-008
+  description: "PeerAuthentication — verify mesh-wide mTLS defaults after migration"
+  category: potential
+  effort: 1
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "PeerAuthentication in OSSM 3"
+      url: "https://istio.io/latest/docs/reference/config/security/peer_authentication/"
+  message: |
+    `PeerAuthentication` resources use the upstream Istio API (`security.istio.io/v1beta1`) and are
+    **fully compatible** with OSSM 3.x — no changes required.
+
+    **Verification:** After migration, confirm that namespace-scoped `PeerAuthentication` resources
+    still take effect. Verify there is no conflict with the new mesh-wide `PeerAuthentication` you
+    create to replace the SMCP `security.dataPlane.mtls: true` field (rule ossm-smcp-mtls-mandatory-005).
+
+    If both a mesh-wide and namespace-scoped `PeerAuthentication` exist, the namespace-scoped one
+    takes precedence.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: PeerAuthentication"
+
+- ruleID: ossm-authorizationpolicy-info-009
+  description: "AuthorizationPolicy is compatible with OSSM 3 — verify principals"
+  category: potential
+  effort: 1
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "AuthorizationPolicy in OSSM 3"
+      url: "https://istio.io/latest/docs/reference/config/security/authorization-policy/"
+  message: |
+    `AuthorizationPolicy` resources use the upstream Istio API (`security.istio.io/v1beta1`) and are
+    **fully compatible** with OSSM 3.x — no changes required to the resource definitions themselves.
+
+    **Verification needed:**
+    - Service account principal paths: Confirm `cluster.local/ns/<namespace>/sa/<serviceaccount>`
+      format still matches — this is unchanged.
+    - If policies reference Maistra-specific namespaces or service account names, review those.
+    - Mesh-wide `AuthorizationPolicy` in `istio-system` works identically in OSSM 3.x.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: AuthorizationPolicy"
+
+- ruleID: ossm-envoyfilter-info-010
+  description: "Review EnvoyFilter for Maistra-specific fields"
+  category: potential
+  effort: 2
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "EnvoyFilter Compatibility"
+      url: "https://istio.io/latest/docs/reference/config/networking/envoy-filter/"
+  message: |
+    `EnvoyFilter` resources are supported in OSSM 3.x. However, some Maistra-specific filter
+    configurations may not be valid under upstream Istio.
+
+    **Action required:**
+    - Remove any fields under the `maistra.io` annotation or Maistra-specific patch targets.
+    - Verify that filter chain match criteria match the upstream Istio proxy version shipped with
+      OSSM 3.x (Istio 1.24.x as of OSSM 3.3).
+    - Re-test all `EnvoyFilter` resources after migration, as they are version-sensitive and
+      can silently fail to apply if the filter name/path changes between Istio versions.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: EnvoyFilter"
+
+- ruleID: ossm-smcp-ingressgateway-mandatory-011
+  description: "SMCP-managed ingress gateway must be redeployed separately in OSSM 3"
+  category: mandatory
+  effort: 3
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "Deploy ingress gateway with OSSM 3"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-traffic-management.html"
+    - title: "Sail Operator gateway deployment"
+      url: "https://github.com/istio-ecosystem/sail-operator/blob/main/docs/README.md"
+  message: |
+    The SMCP field `spec.gateways.ingress.enabled: true` automatically deployed and managed the
+    ingress gateway pod, service, and OpenShift Route. **This does not happen in OSSM 3.**
+
+    When the SMCP is deleted, the ingress gateway is removed and inbound traffic returns HTTP 503.
+
+    **Required action:** Deploy the ingress gateway as a standalone Kubernetes Deployment using
+    Istio's injection-based gateway pattern:
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: istio-ingressgateway
+      namespace: istio-system
+    spec:
+      selector:
+        matchLabels:
+          istio: ingressgateway
+      template:
+        metadata:
+          annotations:
+            inject.istio.io/templates: gateway
+          labels:
+            istio: ingressgateway
+            sidecar.istio.io/inject: "true"
+        spec:
+          serviceAccountName: istio-ingressgateway
+          containers:
+          - name: istio-proxy
+            image: auto
+    ```
+    Also create a matching `Service` (ClusterIP, ports 80/443) and an OpenShift `Route`.
+    The `inject.istio.io/templates: gateway` annotation causes the proxy to run in gateway
+    mode rather than sidecar mode.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "kind: ServiceMeshControlPlane"
+
+- ruleID: ossm-smcp-kiali-mandatory-012
+  description: "SMCP-bundled Kiali must be installed separately via Kiali CR in OSSM 3"
+  category: mandatory
+  effort: 2
+  labels:
+    - konveyor.io/target=ossm3
+    - konveyor.io/source=ossm2
+  links:
+    - title: "Install Kiali with OSSM 3"
+      url: "https://docs.openshift.com/container-platform/4.18/service_mesh/v3x/ossm-observability.html"
+    - title: "Kiali CR reference"
+      url: "https://kiali.io/docs/configuration/kialis.kiali.io/"
+  message: |
+    The SMCP field `spec.addons.kiali.enabled: true` deployed and configured Kiali as a
+    bundled component. **In OSSM 3, Kiali is not included in the control plane.**
+
+    When the SMCP is deleted, the Kiali pod and route are removed. The Kiali URL returns
+    a connection error immediately after migration.
+
+    **Required action:** The Kiali Operator must already be installed (it was a prerequisite
+    for OSSM 2.x). Create a standalone Kiali CR in `istio-system`:
+    ```yaml
+    apiVersion: kiali.io/v1alpha1
+    kind: Kiali
+    metadata:
+      name: kiali
+      namespace: istio-system
+    spec:
+      istio_namespace: istio-system
+      auth:
+        strategy: anonymous
+      deployment:
+        accessible_namespaces:
+          - "**"
+      external_services:
+        istio:
+          root_namespace: istio-system
+        grafana:
+          enabled: false
+        tracing:
+          enabled: false
+    ```
+    Kiali will discover the OSSM 3 control plane automatically via the `istio-system` namespace
+    and display the mesh topology for all enrolled namespaces.
+  when:
+    builtin.filecontent:
+      filePattern: .*\.ya?ml
+      pattern: "name: kiali"

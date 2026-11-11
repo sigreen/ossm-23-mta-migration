@@ -1,0 +1,25 @@
+---
+# IstioCNI — replaces the CNI section embedded in OSSM 2.x SMCP
+apiVersion: sailoperator.io/v1
+kind: IstioCNI
+metadata:
+  name: default
+spec:
+  version: v1.28.10
+  namespace: istio-cni
+---
+# Istio — replaces ServiceMeshControlPlane
+apiVersion: sailoperator.io/v1
+kind: Istio
+metadata:
+  name: default
+spec:
+  version: v1.28.10
+  namespace: istio-system
+  updateStrategy:
+    type: InPlace
+  values:
+    pilot:
+      traceSampling: 1.0
+    meshConfig:
+      accessLogFile: /dev/stdout

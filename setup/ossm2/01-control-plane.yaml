@@ -1,0 +1,64 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    kubernetes.io/metadata.name: istio-system
+---
+apiVersion: maistra.io/v2
+kind: ServiceMeshControlPlane
+metadata:
+  name: basic
+  namespace: istio-system
+spec:
+  version: v2.6
+  security:
+    dataPlane:
+      mtls: true
+    controlPlane:
+      mtls: true
+  tracing:
+    type: Jaeger
+    sampling: 10000
+  addons:
+    jaeger:
+      name: jaeger
+      install:
+        storage:
+          type: Memory
+    kiali:
+      name: kiali
+      enabled: true
+      install:
+        dashboard:
+          viewOnlyMode: false
+    grafana:
+      enabled: false
+  gateways:
+    ingress:
+      enabled: true
+    egress:
+      enabled: true
+  proxy:
+    injection:
+      autoInject: true
+    networking:
+      trafficControl:
+        outbound:
+          policy: ALLOW_ANY
+  techPreview:
+    meshConfig:
+      defaultConfig:
+        proxyMetadata:
+          ISTIO_META_DNS_CAPTURE: "true"
+---
+apiVersion: maistra.io/v1
+kind: ServiceMeshMemberRoll
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  members:
+    - bookinfo
+    - custom-app
